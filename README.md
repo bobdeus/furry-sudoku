@@ -1,6 +1,6 @@
 # Furry Sudoku
 
-A standalone Godot 4.7.2 cat logic game for Android and Windows. Everything runs locally: puzzle generation, hints, audio, settings, and saved progress. There are no advertisements, accounts, analytics, network calls, or online dependencies. The Android manifest requests only vibration permission.
+A standalone Godot 4.7.2 cat logic game for Android and Windows. Everything runs locally: puzzle generation, hints, settings, and saved progress. There are no advertisements, accounts, analytics, network calls, music, sounds, or online dependencies. The Android manifest requests only vibration permission.
 
 ## Play
 
@@ -8,15 +8,15 @@ Download the APK or Windows executable from [GitHub Releases](https://github.com
 
 - Windows: run `builds/windows/Furry Sudoku.exe`. The game is embedded in this single executable.
 - Android: install `builds/android/Furry Sudoku.apk`. It is a release-signed APK for Android 7.0 or later, supporting ARM64 phones and x86_64 devices.
-- Ten puzzles make a round: eight easier puzzles, hard at level 5, and super hard at level 10.
-- Three lives are shared across all ten puzzles. A third incorrect cat placement ends the round. Starting again generates a fresh round.
+- Levels continue indefinitely, with no return to level 1. Every ten completed puzzles adds a completed round to your saved totals. Every tenth level is super hard; levels ending in 5 are hard.
+- Each puzzle starts with three fresh hearts, except levels 7, 17, 27, and so on: those are one-heart challenges. Running out of hearts lets you retry the same puzzle with fresh hearts and an empty board, keeping your level and completion totals.
 - One cat belongs in every row, column, and colored region. Cats must not touch, including diagonally.
 
 Tap to toggle an X. Drag to mark or clear several squares. Double-tap to place a cat. The middle button switches between marking and single-tap cat placement. On Windows, right-click places a cat; arrow keys move the cursor, Space or X marks, Enter places, H requests a hint, Z undoes notes, and Escape goes back.
 
-Hints are unlimited. The first tap highlights the simplest available clue. A second tap explains it and outlines the affected squares. A third applies that deduction. Incorrect notes are corrected before the engine reasons from them. Undo affects notes; it never refunds mistakes. Sound, vibration, and automatic exclusion marks are adjustable in Settings.
+Hints are unlimited. The first tap highlights the simplest available clue. A second tap explains it and outlines the affected squares. A third applies that deduction. Incorrect notes are corrected before the engine reasons from them. Undo affects notes; it never refunds mistakes. Vibration and automatic exclusion marks are adjustable in Settings.
 
-Progress is saved after each move and on pause/exit. On Windows, the save is in `%APPDATA%/Godot/app_userdata/Furry Sudoku/progress.json`. Android uses the app's private local storage. There is no cross-device sync.
+Progress is saved after each move and on pause/exit. On Windows, the save is in `%APPDATA%/Godot/app_userdata/Furry Sudoku/progress.json`. Android uses the app's private local storage. There is no cross-device sync. Version 1.1 upgrades existing saves, keeping the current puzzle and solved totals and using total completed puzzles for continuous level numbering. An unfinished puzzle gets its new heart allowance; a puzzle already out of hearts remains ready to retry.
 
 ### Install on Android
 
@@ -60,14 +60,18 @@ Arguments are difficulty (`easy`, `hard`, `super`), numeric seed, output file, m
 
 ## Assets and credits
 
-The visual reference was Meowdoku by Oakever Games: a warm cream canvas, colored rounded tiles, white X marks, cat faces, rule cards, and soft circular controls. This project uses its own name, code, mascot, icons, and audio.
+The visual reference was Meowdoku by Oakever Games: a warm cream canvas, colored rounded tiles, white X marks, cat faces, rule cards, and soft circular controls. This project uses its own name, code, mascot, and icons.
 
 - `assets/cat.png`: original mascot generated using the built-in image-generation tool. Prompt: “Use case: stylized-concept. Asset type: a single polished game sprite for a cozy cat logic puzzle called Furry Sudoku. Draw one original adorable tuxedo kitten HEAD ONLY, front facing, with charcoal black fur, large pointed ears with dusky pink inner ears, fluffy white cheeks and chin, white blaze from forehead down to tiny coral pink nose, luminous friendly hazel-green eyes, fine white whiskers and a soft contented smile. Premium softly shaded 3D cartoon mobile-game illustration, rounded plush forms, delicate fur texture, warm soft studio light, crisp clean silhouette legible when only 64 pixels wide. Composition: square canvas, head centered, ears and whiskers entirely within frame, head occupies 86 percent of width, no body, no neck, no props. Actual transparent alpha background. No text, no border, no shadow outside the head, no logo, no reference to any existing branded character. This sprite will sit on colored square puzzle tiles.”
 - `assets/Nunito.ttf`: Nunito, from Google Fonts. SIL Open Font License included as `assets/Nunito-OFL.txt`.
-- `assets/icon.svg` and the sound effects: created for this project.
+- `assets/icon.svg`: created for this project.
 - Godot Engine: MIT license, included in `assets/Godot-LICENSE.txt`.
 
-## Verification for this build
+## Verification
+
+Version 1.1.0 imported and exported for Windows and Android without script errors. An isolated preview upgraded a version 1 save with 15 completed puzzles to level 16 with three hearts, then advanced to level 17 with one heart; the saved totals increased to 16 puzzles and remained at one completed round. The packaged Windows executable passed a headless startup check. Android signature verification passed, its version is 1.1.0 (code 2), no audio files are packaged, and vibration remains its only requested permission. No Android device was connected for on-device verification.
+
+Original 1.0 generation and rendering checks:
 
 Godot imported and ran the project without script errors. Twelve independently seeded boards (four per difficulty) generated successfully, and each complete hint walkthrough was checked against the solution. A separate solver independently confirmed one solution for each board. All checked regions were connected, all cat arrangements met the rules, and all hint actions agreed with the solution. Those runs generated boards in 18–257 ms on this PC.
 

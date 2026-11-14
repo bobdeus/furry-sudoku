@@ -29,7 +29,7 @@ var modal := ""
 var loading := false
 var level_won := false
 var cat_mode := false
-var settings := {"sound": true, "haptics": true, "auto_mark": false}
+var settings := {"haptics": true, "auto_mark": false}
 var hint: Dictionary = {}
 var hint_stage := 0
 var buttons: Array = []
@@ -51,8 +51,6 @@ var keyboard_cell := 0
 var keyboard_visible := false
 var design_scale := 1.0
 var design_offset := Vector2.ZERO
-var audio_player: AudioStreamPlayer
-var sound_bank: Dictionary = {}
 var confetti: Array = []
 var ui_font := FontVariation.new()
 var heading_font := FontVariation.new()
@@ -64,12 +62,6 @@ func _ready() -> void:
 	ui_font.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 600.0}
 	heading_font.base_font = FONT
 	heading_font.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 800.0}
-	audio_player = AudioStreamPlayer.new()
-	add_child(audio_player)
-	for sound in ["mark", "cat", "error", "win"]:
-		var path := "res://assets/%s.wav" % sound
-		if ResourceLoader.exists(path):
-			sound_bank[sound] = load(path)
 	_load_progress()
 	resized.connect(queue_redraw)
 	queue_redraw()
@@ -234,24 +226,31 @@ func _draw_home() -> void:
 	_text("A lot of cats.", Rect2(50, 660, 620, 66), 48)
 	_text("Find a cozy spot for every cat.", Rect2(50, 752, 620, 42), 26, MUTED)
 	_panel(Rect2(110, 847, 500, 85), Color("f0e9df"), 24, false)
-	_text("10 puzzles   ·   3 lives   ·   One round", Rect2(110, 871, 500, 40), 24)
+	_text("Endless puzzles   ·   Fresh hearts each time", Rect2(110, 871, 500, 40), 22)
 	var continuing := not puzzle.is_empty() or round_seed != 0
-	_button("play", Rect2(110, 976, 500, 94), "Continue round %d" % round_number if continuing else "Let's play", true, 29)
+	_button("play", Rect2(110, 976, 500, 94), "Continue level %d" % (level + 1) if continuing else "Let's play", true, 29)
 	_button("how", Rect2(185, 1100, 350, 80), "How to play", false, 26)
 	_text("%d puzzles solved   ·   %d rounds completed" % [cleared_puzzles, cleared_rounds], Rect2(50, 1258, 620, 42), 22, MUTED)
 	_text("Just you and the cats. Always offline.", Rect2(50, 1370, 620, 34), 21, MUTED)
 
 func _difficulty(index: int = -1) -> String:
-	var target := level if index == -1 else index
+	var target := (level if index == -1 else index) % 10
 	return "super" if target == 9 else ("hard" if target == 4 else "easy")
+
+func _starting_lives(index: int = -1) -> int:
+	var target := level if index == -1 else index
+	return 1 if target % 10 == 6 else 3
 
 func _draw_game() -> void:
 	_circle_button("home", Vector2(68, 90), "back")
 	_circle_button("settings", Vector2(652, 90), "settings")
 	_text("Level %d" % (level + 1), Rect2(150, 51, 420, 70), 48)
-	_text("ROUND %d" % round_number, Rect2(210, 122, 300, 32), 19, MUTED)
+	var round_label := "ROUND %d" % round_number
+	if _starting_lives() == 1:
+		round_label += "  ·  ONE HEART"
+	_text(round_label, Rect2(150, 122, 420, 32), 19, MUTED)
 	for i in range(10):
-		var c := GREEN if i < level else (INK if i == level else Color("e3d9cf"))
+		var c := GREEN if i < level % 10 else (INK if i == level % 10 else Color("e3d9cf"))
 		var pos := Vector2(220 + i * 31, 179)
 		if i == 4 or i == 9:
 			var pts := PackedVector2Array([pos + Vector2(0, -7), pos + Vector2(7, 0), pos + Vector2(0, 7), pos + Vector2(-7, 0)])
@@ -262,8 +261,8 @@ func _draw_game() -> void:
 	_cat(Rect2(170, 225, 51, 51))
 	_text("%d / %d" % [cats.size(), int(puzzle.get("n", 0))], Rect2(223, 229, 100, 43), 29, GREEN)
 	_panel(Rect2(365, 218, 200, 64), Color.WHITE, 32, false)
-	for i in range(3):
-		_heart(Vector2(407 + i * 57, 249), 23, i < lives)
+	for i in range(_starting_lives()):
+		_heart(Vector2(465 + (i - (_starting_lives() - 1) * 0.5) * 57, 249), 23, i < lives)
 	_panel(Rect2(30, 315, 660, 91), Color.WHITE, 23, false)
 	var rules := ["1 cat per\ncolor", "1 cat per\nrow & column", "Cats cannot\ntouch"]
 	for i in range(3):
@@ -357,10 +356,10 @@ func _draw_modal() -> void:
 	_panel(Rect2(60, 350, 600, 740), BG, 38)
 	if modal == "settings":
 		_text("Make yourself at home", Rect2(90, 395, 540, 52), 33)
-		for i in range(3):
-			var key: String = ["sound", "haptics", "auto_mark"][i]
-			var name: String = ["Soft sounds", "Gentle vibration", "Auto-mark around cats"][i]
-			_button("toggle_" + key, Rect2(100, 490 + i * 105, 520, 80), name + ("   ON" if settings[key] else "   OFF"), false, 25)
+		for i in range(2):
+			var key: String = ["haptics", "auto_mark"][i]
+			var name: String = ["Gentle vibration", "Auto-mark around cats"][i]
+			_button("toggle_" + key, Rect2(100, 535 + i * 120, 520, 80), name + ("   ON" if settings[key] else "   OFF"), false, 25)
 		_button("how", Rect2(100, 825, 520, 72), "How to play", false, 24)
 		_button("close", Rect2(185, 949, 350, 80), "Back to the cats", true, 26)
 	elif modal == "how":
@@ -371,26 +370,26 @@ func _draw_modal() -> void:
 			_text(str(i + 1), Rect2(100, 488 + i * 70, 38, 38), 25, Color.WHITE)
 			_text(instructions[i], Rect2(154, 487 + i * 70, 460, 40), 24, INK, HORIZONTAL_ALIGNMENT_LEFT)
 		_wrap("Tap or drag to mark empty squares. Double-tap to place a cat, or switch to Place cat mode. Right-click also places a cat on Windows.", Rect2(100, 716, 520, 112), 23)
-		_wrap("Ten levels per round. Hard at 5, super hard at 10. Three mistakes end the round. Hints are always free and start with the simplest clue.", Rect2(100, 840, 520, 111), 23)
+		_wrap("Three fresh hearts per puzzle. Levels 7, 17, 27… have just one! Retry without losing levels. Every ten puzzles completes a round. Hints are always free.", Rect2(100, 840, 520, 111), 23)
 		_button("close", Rect2(185, 978, 350, 76), "Got it", true)
 	elif modal == "won":
 		_cat(Rect2(270, 406, 180, 184))
 		_text("Everybody's cozy!", Rect2(90, 634, 540, 60), 40)
 		_text("Level %d complete" % (level + 1), Rect2(90, 710, 540, 44), 28, MUTED)
-		_text("%d of 10  ·  %d lives left" % [level + 1, lives], Rect2(90, 781, 540, 44), 27)
+		_text("%d puzzles solved in total" % cleared_puzzles, Rect2(90, 781, 540, 44), 27)
 		_button("next", Rect2(135, 914, 450, 88), "Next puzzle", true)
 	elif modal == "round_won":
 		_cat(Rect2(260, 398, 200, 204))
-		_text("A perfect little round.", Rect2(80, 631, 560, 60), 37)
-		_text("All 10 puzzles solved", Rect2(90, 714, 540, 44), 29)
-		_wrap("Your next round brings ten freshly generated puzzles and three new lives.", Rect2(110, 795, 500, 94), 25, MUTED)
-		_button("new_round", Rect2(135, 931, 450, 88), "Another round", true)
+		_text("Round %d complete!" % round_number, Rect2(80, 631, 560, 60), 37)
+		_text("%d rounds completed in total" % cleared_rounds, Rect2(90, 714, 540, 44), 27)
+		_wrap("Keep going! Your next puzzle has three fresh hearts, and your level keeps climbing.", Rect2(110, 795, 500, 94), 25, MUTED)
+		_button("next", Rect2(135, 931, 450, 88), "On to level %d" % (level + 2), true)
 	elif modal == "lost":
 		_cat(Rect2(275, 415, 170, 174))
-		_text("A fresh start?", Rect2(90, 637, 540, 60), 42)
-		_text("You've used your three lives.", Rect2(90, 723, 540, 44), 27)
-		_wrap("This round is over. A new round starts at level 1 with new puzzles and all three lives.", Rect2(110, 804, 500, 100), 25, MUTED)
-		_button("new_round", Rect2(135, 945, 450, 88), "Start a new round", true)
+		_text("Give it another try.", Rect2(90, 637, 540, 60), 40)
+		_text("That was your last heart.", Rect2(90, 723, 540, 44), 27)
+		_wrap("Your level and completed rounds are safe. Retry this puzzle with %s." % ("one fresh heart" if _starting_lives() == 1 else "three fresh hearts"), Rect2(110, 804, 500, 100), 25, MUTED)
+		_button("retry_puzzle", Rect2(135, 945, 450, 88), "Retry level %d" % (level + 1), true)
 	elif modal == "generation_error":
 		_text("Let's find another puzzle", Rect2(90, 540, 540, 60), 34)
 		_wrap("That search took longer than expected. Your progress and lives are safe.", Rect2(110, 680, 500, 110), 26)
@@ -466,7 +465,6 @@ func _cell_at(point: Vector2) -> int:
 	return y * n + x
 
 func _action(id: String) -> void:
-	_sound("mark")
 	if id.begins_with("toggle_"):
 		var key := id.trim_prefix("toggle_")
 		settings[key] = not settings[key]
@@ -482,7 +480,7 @@ func _action(id: String) -> void:
 			elif lives == 0:
 				modal = "lost"
 			elif level_won:
-				modal = "round_won" if level == 9 else "won"
+				modal = "round_won" if level % 10 == 9 else "won"
 		"home":
 			screen = "home"
 			_save_progress()
@@ -493,16 +491,29 @@ func _action(id: String) -> void:
 		"close":
 			modal = ""
 		"next":
+			if not level_won:
+				return
 			level += 1
-			modal = ""
-			_generate()
-		"new_round":
-			round_number += 1
-			level = 0
-			lives = 3
+			round_number = level / 10 + 1
+			lives = _starting_lives()
 			round_seed = randi_range(1, 2000000000)
 			modal = ""
 			_generate()
+		"retry_puzzle":
+			if lives > 0 or level_won:
+				return
+			lives = _starting_lives()
+			cats.clear()
+			marks.clear()
+			history.clear()
+			hint.clear()
+			elapsed = 0.0
+			error_cell = -1
+			placed_cell = -1
+			last_cell = -1
+			toast = ""
+			modal = ""
+			_save_progress()
 		"retry":
 			modal = ""
 			round_seed = randi_range(1, 2000000000)
@@ -540,11 +551,14 @@ func _generate() -> void:
 	loading = true
 	cat_mode = false
 	last_cell = -1
+	error_cell = -1
+	placed_cell = -1
+	toast = ""
 	elapsed = 0
 	_save_progress()
 	worker_engine = Puzzle.new()
 	worker = Thread.new()
-	var n := 6 if level < 2 else 7
+	var n := 6 if level % 10 < 2 else 7
 	worker.start(worker_engine.generate.bind(_difficulty(), round_seed + level * 104729, n))
 
 func _mark(cell: int, value: bool, remember: bool) -> void:
@@ -559,7 +573,6 @@ func _mark(cell: int, value: bool, remember: bool) -> void:
 		marks.append(cell)
 	elif not value:
 		marks.erase(cell)
-	_sound("mark")
 	_save_progress()
 
 func _place(cell: int) -> void:
@@ -573,7 +586,6 @@ func _place(cell: int) -> void:
 		marks.erase(cell)
 		placed_cell = cell
 		placed_at = clock_time
-		_sound("cat")
 		if settings.auto_mark:
 			for other in range(puzzle.n * puzzle.n):
 				if not cats.has(other) and not marks.has(other) and engine.conflicts(cell, other, puzzle.n, puzzle.regions):
@@ -585,28 +597,26 @@ func _place(cell: int) -> void:
 			marks.append(cell)
 		error_cell = cell
 		error_until = clock_time + 2.5
-		_sound("error")
 		if settings.haptics and OS.get_name() == "Android":
 			Input.vibrate_handheld(70)
 		if lives == 0:
 			modal = "lost"
 		else:
-			toast = "%d %s left in this round" % [lives, "lives" if lives != 1 else "life"]
+			toast = "%d %s left in this puzzle" % [lives, "hearts" if lives != 1 else "heart"]
 			toast_until = clock_time + 2.2
 	_save_progress()
 
 func _check_win() -> void:
-	if cats.size() != puzzle.n:
+	if level_won or cats.size() != puzzle.n:
 		return
 	level_won = true
 	cleared_puzzles += 1
 	for i in range(puzzle.n * puzzle.n):
 		if not cats.has(i) and not marks.has(i):
 			marks.append(i)
-	if level == 9:
+	if cleared_puzzles % 10 == 0:
 		cleared_rounds += 1
-	modal = "round_won" if level == 9 else "won"
-	_sound("win")
+	modal = "round_won" if level % 10 == 9 else "won"
 	for i in range(70):
 		confetti.append({"p": Vector2(randf_range(70, 650), randf_range(-160, 200)), "v": Vector2(randf_range(-45, 45), randf_range(100, 260)), "angle": randf() * TAU, "spin": randf_range(-3, 3), "color": PALETTE[i % PALETTE.size()]})
 
@@ -641,16 +651,10 @@ func _show_hint() -> void:
 		toast_until = clock_time + 2.5
 	hint_stage = 0
 
-func _sound(name: String) -> void:
-	if settings.sound and sound_bank.has(name):
-		audio_player.stream = sound_bank[name]
-		audio_player.volume_db = -14 if name == "mark" else -9
-		audio_player.play()
-
 func _save_progress() -> void:
 	if not is_node_ready() or not persistence_enabled:
 		return
-	var data := {"version": 1, "round": round_number, "level": level, "lives": lives, "seed": round_seed, "puzzle": puzzle, "cats": cats, "marks": marks, "level_won": level_won, "cleared_rounds": cleared_rounds, "cleared_puzzles": cleared_puzzles, "settings": settings, "elapsed": elapsed}
+	var data := {"version": 2, "round": round_number, "level": level, "lives": lives, "seed": round_seed, "puzzle": puzzle, "cats": cats, "marks": marks, "level_won": level_won, "cleared_rounds": cleared_rounds, "cleared_puzzles": cleared_puzzles, "settings": settings, "elapsed": elapsed}
 	var file := FileAccess.open(SAVE + ".tmp", FileAccess.WRITE)
 	if file == null:
 		push_error("Could not save progress: %s" % FileAccess.get_open_error())
@@ -662,18 +666,24 @@ func _save_progress() -> void:
 		push_error("Could not finish saving progress: %s" % error)
 
 func _load_progress() -> void:
-	if not FileAccess.file_exists(SAVE):
+	if not persistence_enabled or not FileAccess.file_exists(SAVE):
 		return
 	var data = JSON.parse_string(FileAccess.get_file_as_string(SAVE))
-	if not data is Dictionary or int(data.get("version", 0)) != 1:
+	if not data is Dictionary or int(data.get("version", 0)) not in [1, 2]:
 		return
-	round_number = maxi(1, int(data.get("round", 1)))
-	level = clampi(int(data.get("level", 0)), 0, 9)
-	lives = clampi(int(data.get("lives", 3)), 0, 3)
+	level = maxi(0, int(data.get("level", 0)))
 	round_seed = int(data.get("seed", 0))
-	cleared_rounds = int(data.get("cleared_rounds", 0))
-	cleared_puzzles = int(data.get("cleared_puzzles", 0))
+	cleared_rounds = maxi(0, int(data.get("cleared_rounds", 0)))
+	cleared_puzzles = maxi(0, int(data.get("cleared_puzzles", 0)))
 	level_won = bool(data.get("level_won", false))
+	if int(data.version) == 1:
+		# Old saves numbered levels within a round and counted failed attempts as rounds.
+		level = maxi(level, cleared_puzzles - (1 if level_won else 0))
+		cleared_rounds = maxi(cleared_rounds, cleared_puzzles / 10)
+	round_number = level / 10 + 1
+	lives = clampi(int(data.get("lives", _starting_lives())), 0, _starting_lives())
+	if int(data.version) == 1 and lives > 0 and not level_won:
+		lives = _starting_lives()
 	elapsed = float(data.get("elapsed", 0))
 	for key in settings:
 		settings[key] = bool(data.get("settings", {}).get(key, settings[key]))
