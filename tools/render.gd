@@ -6,7 +6,7 @@ func _initialize() -> void:
 func _render() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() < 2:
-		printerr("Usage: --script res://tools/render.gd -- puzzle.json output.png [game|hint|deep|guided|retry|home|how|scoring|won|lost] [level-number]")
+		printerr("Usage: --script res://tools/render.gd -- puzzle.json output.png [game|hint|deep|guided|retry|home|how|scoring|won|lost] [level-number] [interactive]")
 		quit(1)
 		return
 	var game = load("res://scenes/main.tscn").instantiate()
@@ -78,4 +78,7 @@ func _render() -> void:
 	await RenderingServer.frame_post_draw
 	var error := root.get_texture().get_image().save_png(args[1])
 	print("Rendered %s: %s" % [view, args[1]])
+	if error == OK and args.has("interactive"):
+		root.title = "Furry Sudoku Preview"
+		return
 	quit(error)

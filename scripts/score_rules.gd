@@ -20,7 +20,7 @@ static func profile(puzzle: Dictionary) -> Dictionary:
 	var base := roundi((800 + n * 100 + pow(100 - percent, 1.35) * 12) / 50.0) * 50
 	return {"clean_percent": percent, "stars": clampi(ceili((100 - percent) / 20.0), 1, 5), "base": base}
 
-static func points(base: int, hints: int, misses: int, one_heart: bool) -> int:
+static func points(base: int, hints: int, misses: int, one_heart: bool, undos: int = 0) -> int:
 	var focus := pow(maxi(0, 3 - hints) / 3.0, 2)
 	var accuracy := pow(0.75, misses * (misses + 1) / 2.0)
-	return roundi(base * (1.2 if one_heart else 1.0) * focus * accuracy)
+	return roundi(base * (1.2 if one_heart else 1.0) * focus * accuracy * pow(0.9, undos))

@@ -15,7 +15,7 @@ Download the APK or Windows executable from [GitHub Releases](https://github.com
 
 Tap to toggle an X. Drag to mark or clear several squares. Double-tap to place a cat. The middle button switches between marking and single-tap cat placement. On Windows, right-click places a cat; arrow keys move the cursor, Space or X marks, Enter places, H requests a hint, Z undoes notes, and Escape goes back.
 
-Hints are unlimited. The first tap highlights the simplest available clue. A second tap explains it and outlines the affected squares. A third applies that deduction. Incorrect notes are corrected before the engine reasons from them. Undo affects notes; it never refunds mistakes. Vibration and automatic exclusion marks are adjustable in Settings.
+Hints are unlimited. The first tap highlights the simplest available clue. A second tap explains it and outlines the affected squares. A third applies that deduction. Incorrect notes are corrected before the engine reasons from them. Undo affects notes; it never refunds mistakes and each successful undo costs 10% of the level's remaining points. Vibration and automatic exclusion marks are adjustable in Settings. Tap the Rules link above the board for an illustrated explanation of the three rules.
 
 Progress is saved after each move and on pause/exit. On Windows, the save is in `%APPDATA%/Godot/app_userdata/Furry Sudoku/progress.json`. Android uses the app's private local storage. There is no cross-device sync. Version 1.1 upgrades existing saves, keeping the current puzzle and solved totals and using total completed puzzles for continuous level numbering. An unfinished puzzle gets its new heart allowance; a puzzle already out of hearts remains ready to retry.
 
@@ -28,9 +28,10 @@ The board shows the current level's potential score and your cumulative score. F
 - A puzzle's base value increases with cat count and the estimated rarity of a clean solve. One-heart levels earn a 20% bonus.
 - Revealing the first distinct hint retains 4/9 of the score (about 44%); the second retains 1/9 (about 11%); the third makes it zero. Further hints remain available. Explain, Apply, and reopening an already revealed clue do not count as extra hints.
 - Misses compound: the score multiplier is `0.75^(m*(m+1)/2)`, where `m` is the number of misses. One miss retains 75%, two retain about 42%, and three retain about 18%, before hint penalties.
-- Final points are rounded to the nearest integer: `base * one_heart_bonus * (max(0, 3-hints)/3)^2 * 0.75^(misses*(misses+1)/2)`.
+- Each successful Undo retains 90% of the current level's points, compounded for repeated undos. An unavailable Undo costs nothing. The undo count is saved and resets for the next level or a fresh retry; previously banked points are unaffected.
+- Final points are rounded to the nearest integer: `base * one_heart_bonus * (max(0, 3-hints)/3)^2 * 0.75^(misses*(misses+1)/2) * 0.9^undos`.
 
-Every board has a 1–5 difficulty rating and an estimated percentage of players who could solve it without hints or misses. These are explicitly labeled **design estimates, not player statistics**. The estimate uses the solver's hardest deduction, the number of advanced deductions, cat count, and region boundaries, rounded to 5% increments. It ranges from 10% to 90%. The base is `800 + 100*cats + 12*(100-estimated_percent)^1.35`, rounded to the nearest 50 points. There is no time penalty.
+Every board has a 1–5 difficulty rating and displays “Approximately X% can solve without hints or misses.” This percentage is calculated from the solver's hardest deduction, the number of advanced deductions, cat count, and region boundaries; it is not measured from player telemetry. It is rounded to 5% increments and ranges from 10% to 90%. The base is `800 + 100*cats + 12*(100-estimated_percent)^1.35`, rounded to the nearest 50 points. There is no time penalty.
 
 ### Install on Android
 
@@ -72,7 +73,7 @@ godot --headless --path . --script res://tools/generate.gd -- super 12345 C:/pat
 
 Arguments are difficulty (`easy`, `hard`, `super`), numeric seed, output file, maximum candidate attempts, and optional `explain`. Put temporary output outside the project.
 
-`tools/render.gd` captures game, hint, scoring, completion, loss, guided-play, and regenerated-retry screens without changing the player's save. Pass a puzzle JSON, output PNG, view name, and optional one-based level number. The `guided` and `retry` views use the game's hint and retry actions; use level `17` to capture a one-heart retry.
+`tools/render.gd` captures game, hint, scoring, completion, loss, guided-play, and regenerated-retry screens without changing the player's save. Pass a puzzle JSON, output PNG, view name, and optional one-based level number. The `guided` and `retry` views use the game's hint and retry actions; use level `17` to capture a one-heart retry. Append `interactive` to keep the isolated preview open for mouse/keyboard checks after capture; preview progress is never saved.
 
 ## Assets and credits
 
@@ -84,6 +85,8 @@ The visual reference was Meowdoku by Oakever Games: a warm cream canvas, colored
 - Godot Engine: MIT license, included in `assets/Godot-LICENSE.txt`.
 
 ## Verification
+
+Version 1.3.0: native Windows clicks opened and closed the illustrated Rules panel and scoring breakdown in an isolated preview. Two successful undos reduced 3,650 points to 3,285 and then 2,957; an unavailable third undo left the score unchanged. After exhausting three hearts, Retry generated a different board at the same level, restored three hearts/full points, and showed zero hints, misses, and undos. The revised solve-percentage wording and dialogs were visually inspected. Both release builds exported, and Android version 1.3.0 (code 4) signature verification passed. On-device Android verification remains outstanding.
 
 Version 1.2.0: twelve generated boards (four per difficulty) passed the existing full hint walkthrough; standard/hard boards had eight cats and super-hard boards had nine. Game-driven renders exercised score banking on completion, miss penalties, three-hint zero scoring, and fresh-board retries for both three-heart and one-heart levels. Retries kept their level number, cleared penalties, restored the appropriate hearts/full potential points, and produced a different normalized layout. A separate save fixture reloaded a 3,600-point total and the current level's three-hint zero score. Gameplay, scoring help, victory, loss, and retry renders were inspected. Windows release startup and Android signature/version/permission checks passed. Native mouse/touch interaction and on-device Android checks remain outstanding.
 

@@ -29,6 +29,7 @@ var cleared_puzzles := 0
 var total_score := 0
 var level_scores: Dictionary = {}
 var level_misses := 0
+var level_undos := 0
 var revealed_hints: Array = []
 var challenge: Dictionary = {}
 var screen := "home"
@@ -262,10 +263,10 @@ func _number(value: int) -> String:
 func _level_score() -> int:
 	if level_won:
 		return int(level_scores.get(str(level + 1), 0))
-	return ScoreRules.points(int(challenge.get("base", 0)), revealed_hints.size(), level_misses, _starting_lives() == 1)
+	return ScoreRules.points(int(challenge.get("base", 0)), revealed_hints.size(), level_misses, _starting_lives() == 1, level_undos)
 
 func _estimate() -> String:
-	return "Estimate: ~%d%% solve with no hints or misses" % int(challenge.get("clean_percent", 0))
+	return "Approximately %d%% can solve without hints or misses" % int(challenge.get("clean_percent", 0))
 
 func _draw_game() -> void:
 	_circle_button("home", Vector2(68, 90), "back")
@@ -297,10 +298,9 @@ func _draw_game() -> void:
 		_text(value, Rect2(x + 137, 307, 170, 40), 26 if value.length() < 10 else 21, GREEN if i == 0 else INK, HORIZONTAL_ALIGNMENT_RIGHT)
 	buttons.append({"id": "scoring", "rect": Rect2(30, 295, 660, 61)})
 	_panel(Rect2(30, 367, 660, 61), Color.WHITE, 19, false)
-	var rules := ["1 cat per\ncolor", "1 cat per\nrow & column", "Cats cannot\ntouch"]
-	for i in range(3):
-		_panel(Rect2(40 + i * 217, 373, 207, 49), Color("f7f1e9"), 12, false)
-		_wrap(rules[i], Rect2(45 + i * 217, 372, 197, 52), 19)
+	_text("Rules", Rect2(300, 376, 120, 36), 23, GREEN)
+	draw_line(Vector2(333, 408), Vector2(387, 408), GREEN, 1.5, true)
+	buttons.append({"id": "how", "rect": Rect2(285, 365, 150, 60)})
 	if loading:
 		_panel(BOARD, Color.WHITE, 25, false)
 		_cat(Rect2(276, 630 + sin(clock_time * 3) * 8, 168, 172))
@@ -320,8 +320,7 @@ func _draw_game() -> void:
 			color = Color("9e78b0")
 		if not puzzle.is_empty():
 			_text("%s  ·  Difficulty %d/5" % [label, int(challenge.get("stars", 0))], Rect2(40, 1116, 640, 34), 22, color)
-			_text(_estimate(), Rect2(40, 1151, 640, 34), 21, INK)
-			_text("Design estimate, not player statistics", Rect2(40, 1185, 640, 28), 17, MUTED)
+			_wrap(_estimate(), Rect2(40, 1155, 640, 54), 21, INK)
 		_text("Tap to mark ×  ·  Double-tap to place a cat", Rect2(40, 1220, 640, 30), 20, MUTED)
 	else:
 		_draw_hint()
@@ -334,7 +333,7 @@ func _draw_game() -> void:
 			_cat(Rect2(pos - Vector2(35, 35), Vector2(70, 72)))
 		else:
 			_icon("bulb", pos, 32, INK)
-		var labels := ["Undo", "Place cat" if cat_mode else "Mark ×", "Hint · %d/3" % mini(3, revealed_hints.size()) if hint.is_empty() else ("Explain" if hint_stage == 0 else "Apply hint")]
+		var labels := ["Undo · −10%", "Place cat" if cat_mode else "Mark ×", "Hint · %d/3" % mini(3, revealed_hints.size()) if hint.is_empty() else ("Explain" if hint_stage == 0 else "Apply hint")]
 		_text(labels[i], Rect2(pos.x - 88, 1384, 176, 36), 22)
 		buttons.append({"id": ["undo", "mode", "hint"][i], "rect": Rect2(pos - Vector2(70, 58), Vector2(140, 155))})
 
@@ -386,10 +385,27 @@ func _draw_hint() -> void:
 	_icon("close", Vector2(657, 1149), 17, MUTED)
 	buttons.append({"id": "dismiss_hint", "rect": Rect2(632, 1127, 50, 45)})
 
+func _rule_illustration(rule: int, area: Rect2) -> void:
+	var cat_cells: Array = [[4, 11], [1, 7, 8, 14], [5]][rule]
+	var blocked := [0, 1, 2, 4, 6, 8, 9, 10]
+	var pitch := area.size.x / 4.0
+	for cell in range(16):
+		var tile := Rect2(area.position + Vector2(cell % 4, cell / 4) * pitch, Vector2.ONE * (pitch - 3))
+		var color: Color = PALETTE[1 if cell % 4 < 2 else 2] if rule == 0 else PALETTE[3 + cell / 4]
+		if rule == 2:
+			color = Color("dfb7bb") if blocked.has(cell) else Color("e8e0d6")
+		_panel(tile, color, 5, false)
+		if cat_cells.has(cell):
+			_cat(tile.grow(2))
+		elif rule == 2 and blocked.has(cell):
+			var center := tile.get_center()
+			for direction in [-1, 1]:
+				draw_line(center + Vector2(-5, -5 * direction), center + Vector2(5, 5 * direction), Color.WHITE, 3, true)
+
 func _draw_modal() -> void:
 	buttons.clear()
 	draw_rect(Rect2(0, 0, 720, 1440), Color(0.30, 0.23, 0.22, 0.30))
-	_panel(Rect2(60, 350, 600, 740), BG, 38)
+	_panel(Rect2(60, 230, 600, 1000) if modal == "how" else Rect2(60, 350, 600, 740), BG, 38)
 	if modal == "settings":
 		_text("Make yourself at home", Rect2(90, 395, 540, 52), 33)
 		for i in range(2):
@@ -399,21 +415,24 @@ func _draw_modal() -> void:
 		_button("how", Rect2(100, 825, 520, 72), "How to play", false, 24)
 		_button("close", Rect2(185, 949, 350, 80), "Back to the cats", true, 26)
 	elif modal == "how":
-		_text("Every cat needs a spot", Rect2(90, 397, 540, 55), 35)
-		var instructions := ["One cat in each colored region.", "One cat in every row and column.", "Cats cannot touch, even diagonally."]
+		_text("A cozy spot for every cat", Rect2(90, 273, 540, 55), 34)
+		_text("Three little rules. One clever puzzle.", Rect2(90, 338, 540, 38), 23, MUTED)
+		var titles := ["One cat per color", "One cat per row and column", "Cats cannot touch"]
+		var descriptions := ["Each colored area needs exactly one cat. Find its perfect spot.", "Every row across and every column down needs exactly one cat.", "Leave space between cats. They cannot sit side by side or meet corner to corner."]
 		for i in range(3):
-			draw_circle(Vector2(119, 505 + i * 70), 19, PALETTE[i])
-			_text(str(i + 1), Rect2(100, 488 + i * 70, 38, 38), 25, Color.WHITE)
-			_text(instructions[i], Rect2(154, 487 + i * 70, 460, 40), 24, INK, HORIZONTAL_ALIGNMENT_LEFT)
-		_wrap("Tap or drag to mark empty squares. Double-tap to place a cat, or switch to Place cat mode. Right-click also places a cat on Windows.", Rect2(100, 716, 520, 112), 23)
-		_wrap("At least eight cats per new puzzle. Fresh hearts each level; levels 7, 17, 27… have one. Hints reduce points; three hints means zero. Tap a score to learn more.", Rect2(100, 840, 520, 111), 23)
-		_button("close", Rect2(185, 978, 350, 76), "Got it", true)
+			var top := 408 + i * 174
+			_panel(Rect2(85, top, 550, 158), Color.WHITE, 22, false)
+			_rule_illustration(i, Rect2(104, top + 25, 112, 112))
+			_wrap(titles[i], Rect2(236, top + 17, 375, 54), 24, INK, HORIZONTAL_ALIGNMENT_LEFT)
+			_wrap(descriptions[i], Rect2(236, top + 79, 375, 65), 20, INK, HORIZONTAL_ALIGNMENT_LEFT)
+		_wrap("Tap or drag to mark ×. Double-tap or right-click to place a cat. Undo costs 10% of this level's remaining points.", Rect2(100, 960, 520, 92), 22, MUTED)
+		_button("close", Rect2(185, 1100, 350, 78), "Back to the puzzle", true, 26)
 	elif modal == "scoring":
 		_text("The Nine Lives score", Rect2(90, 395, 540, 52), 35)
-		_wrap("Rarer clean solves earn more. Hints keep 44%, then 11%, then 0% of your points. Each miss compounds the penalty.", Rect2(100, 471, 520, 101), 23)
+		_wrap("Rarer clean solves earn more. Hints keep 44%, then 11%, then 0%. Misses compound. Each Undo keeps 90% of the remaining points.", Rect2(100, 471, 520, 101), 22)
 		_text("Puzzle value: %s" % _number(int(challenge.get("base", 0))), Rect2(90, 595, 540, 38), 25)
 		_text("One-heart bonus: %s" % ("+20%" if _starting_lives() == 1 else "not this level"), Rect2(90, 641, 540, 38), 23)
-		_text("%d hints revealed  ·  %d misses" % [revealed_hints.size(), level_misses], Rect2(90, 694, 540, 38), 24)
+		_text("%d hints  ·  %d misses  ·  %d undos" % [revealed_hints.size(), level_misses, level_undos], Rect2(90, 694, 540, 38), 24)
 		_text("LEVEL  %s" % _number(_level_score()), Rect2(90, 750, 540, 45), 32, GREEN)
 		_text("TOTAL  %s" % _number(total_score), Rect2(90, 806, 540, 40), 27)
 		_wrap("Points bank when you finish. Explain, Apply and reopening a clue cost no extra. A retry gives a new puzzle and full potential points. Hints stay available at zero.", Rect2(100, 864, 520, 96), 21, MUTED)
@@ -425,13 +444,13 @@ func _draw_modal() -> void:
 		_panel(Rect2(110, 666, 500, 112), Color("edf4eb"), 24, false)
 		_text("+%s points" % _number(_level_score()), Rect2(120, 678, 480, 50), 38, GREEN)
 		_text("TOTAL SCORE  %s" % _number(total_score), Rect2(120, 735, 480, 33), 23)
-		var result := "%d hints  ·  %d misses" % [revealed_hints.size(), level_misses]
+		var result := "%d hints  ·  %d misses  ·  %d undos" % [revealed_hints.size(), level_misses, level_undos]
 		if not level_scores.has(str(level + 1)):
 			result = "Completed before scoring was introduced"
-		elif revealed_hints.is_empty() and level_misses == 0:
-			result = "Perfect paws! No hints. No misses."
+		elif revealed_hints.is_empty() and level_misses == 0 and level_undos == 0:
+			result = "Perfect paws! No hints, misses or undos."
 		_text(result, Rect2(85, 797, 550, 36), 23)
-		_wrap(_estimate() + ".\nDesign estimate, not player statistics.", Rect2(95, 847, 530, 72), 20, MUTED)
+		_wrap(_estimate() + ".", Rect2(95, 847, 530, 72), 20, MUTED)
 		_button("next", Rect2(135, 958, 450, 88), "On to level %d" % (level + 2), true)
 	elif modal == "lost":
 		_cat(Rect2(275, 415, 170, 174))
@@ -552,6 +571,7 @@ func _action(id: String) -> void:
 			level += 1
 			previous_layout = ""
 			level_misses = 0
+			level_undos = 0
 			revealed_hints.clear()
 			round_number = level / 10 + 1
 			lives = _starting_lives()
@@ -564,6 +584,7 @@ func _action(id: String) -> void:
 			previous_layout = engine.layout_key(puzzle)
 			lives = _starting_lives()
 			level_misses = 0
+			level_undos = 0
 			revealed_hints.clear()
 			round_seed = (round_seed - 1 + randi_range(1, 1999999999)) % 2000000000 + 1
 			modal = ""
@@ -576,8 +597,9 @@ func _action(id: String) -> void:
 			cat_mode = not cat_mode
 			last_cell = -1
 		"undo":
-			if not history.is_empty() and not loading:
+			if not history.is_empty() and not loading and not level_won and lives > 0:
 				marks = history.pop_back()
+				level_undos += 1
 				hint.clear()
 				_save_progress()
 		"hint":
@@ -669,7 +691,7 @@ func _check_win() -> void:
 	level_won = true
 	var score_key := str(level + 1)
 	if not level_scores.has(score_key):
-		var earned := ScoreRules.points(int(challenge.get("base", 0)), revealed_hints.size(), level_misses, _starting_lives() == 1)
+		var earned := ScoreRules.points(int(challenge.get("base", 0)), revealed_hints.size(), level_misses, _starting_lives() == 1, level_undos)
 		level_scores[score_key] = earned
 		total_score += earned
 	cleared_puzzles += 1
@@ -730,6 +752,7 @@ func _save_progress() -> void:
 		return
 	var data := {"version": 3, "round": round_number, "level": level, "lives": lives, "seed": round_seed, "puzzle": puzzle, "cats": cats, "marks": marks, "level_won": level_won, "cleared_rounds": cleared_rounds, "cleared_puzzles": cleared_puzzles, "settings": settings, "elapsed": elapsed, "level_scores": level_scores, "level_misses": level_misses, "revealed_hints": revealed_hints}
 	data.previous_layout = previous_layout
+	data.level_undos = level_undos
 	var file := FileAccess.open(SAVE + ".tmp", FileAccess.WRITE)
 	if file == null:
 		push_error("Could not save progress: %s" % FileAccess.get_open_error())
@@ -766,6 +789,7 @@ func _load_progress() -> void:
 		level_scores[key] = maxi(0, int(level_scores[key]))
 		total_score += level_scores[key]
 	level_misses = maxi(0, int(data.get("level_misses", _starting_lives() - lives)))
+	level_undos = maxi(0, int(data.get("level_undos", 0)))
 	revealed_hints = data.get("revealed_hints", [])
 	elapsed = float(data.get("elapsed", 0))
 	for key in settings:
@@ -784,6 +808,7 @@ func _load_progress() -> void:
 			marks.clear()
 			lives = _starting_lives()
 			level_misses = 0
+			level_undos = 0
 			revealed_hints.clear()
 			elapsed = 0.0
 		challenge = ScoreRules.profile(puzzle)
