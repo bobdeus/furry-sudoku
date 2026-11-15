@@ -8,7 +8,7 @@ func _initialize() -> void:
 	var seed_value := int(args[1]) if args.size() > 1 else int(Time.get_unix_time_from_system())
 	var engine := EngineClass.new()
 	var budget := int(args[3]) if args.size() > 3 else 20000
-	var puzzle := engine.generate(difficulty, seed_value, 7, budget)
+	var puzzle := engine.generate(difficulty, seed_value, 8, budget)
 	if puzzle.is_empty():
 		push_error("No qualifying puzzle found.")
 		quit(1)

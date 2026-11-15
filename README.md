@@ -9,7 +9,8 @@ Download the APK or Windows executable from [GitHub Releases](https://github.com
 - Windows: run `builds/windows/Furry Sudoku.exe`. The game is embedded in this single executable.
 - Android: install `builds/android/Furry Sudoku.apk`. It is a release-signed APK for Android 7.0 or later, supporting ARM64 phones and x86_64 devices.
 - Levels continue indefinitely, with no return to level 1. Every ten completed puzzles adds a completed round to your saved totals. Every tenth level is super hard; levels ending in 5 are hard.
-- Each puzzle starts with three fresh hearts, except levels 7, 17, 27, and so on: those are one-heart challenges. Running out of hearts lets you retry the same puzzle with fresh hearts and an empty board, keeping your level and completion totals.
+- Each puzzle starts with three fresh hearts, except levels 7, 17, 27, and so on: those are one-heart challenges. After losing, retry generates a different puzzle at the same level number, restores hearts and full potential points, and clears hint/miss penalties. Your cumulative score and completed-level totals stay intact. The generator excludes the previous layout even if its colors are renamed.
+- All newly generated puzzles have at least eight cats. Standard boards require overlapping deductions, hard boards require reserved sets, and super-hard boards have nine cats and require deeper reasoning.
 - One cat belongs in every row, column, and colored region. Cats must not touch, including diagonally.
 
 Tap to toggle an X. Drag to mark or clear several squares. Double-tap to place a cat. The middle button switches between marking and single-tap cat placement. On Windows, right-click places a cat; arrow keys move the cursor, Space or X marks, Enter places, H requests a hint, Z undoes notes, and Escape goes back.
@@ -17,6 +18,19 @@ Tap to toggle an X. Drag to mark or clear several squares. Double-tap to place a
 Hints are unlimited. The first tap highlights the simplest available clue. A second tap explains it and outlines the affected squares. A third applies that deduction. Incorrect notes are corrected before the engine reasons from them. Undo affects notes; it never refunds mistakes. Vibration and automatic exclusion marks are adjustable in Settings.
 
 Progress is saved after each move and on pause/exit. On Windows, the save is in `%APPDATA%/Godot/app_userdata/Furry Sudoku/progress.json`. Android uses the app's private local storage. There is no cross-device sync. Version 1.1 upgrades existing saves, keeping the current puzzle and solved totals and using total completed puzzles for continuous level numbering. An unfinished puzzle gets its new heart allowance; a puzzle already out of hearts remains ready to retry.
+
+Version 1.2 preserves level numbers and completion totals. An unfinished legacy board with fewer than eight cats is replaced at the same level number. Already completed levels are not given invented historical scores. Earned scores, current hint/miss penalties, and the layout excluded by a retry are saved across app restarts.
+
+### Nine Lives scoring
+
+The board shows the current level's potential score and your cumulative score. Finishing a level banks its score exactly once; losing never subtracts from previously banked points. Tap either score to see its breakdown.
+
+- A puzzle's base value increases with cat count and the estimated rarity of a clean solve. One-heart levels earn a 20% bonus.
+- Revealing the first distinct hint retains 4/9 of the score (about 44%); the second retains 1/9 (about 11%); the third makes it zero. Further hints remain available. Explain, Apply, and reopening an already revealed clue do not count as extra hints.
+- Misses compound: the score multiplier is `0.75^(m*(m+1)/2)`, where `m` is the number of misses. One miss retains 75%, two retain about 42%, and three retain about 18%, before hint penalties.
+- Final points are rounded to the nearest integer: `base * one_heart_bonus * (max(0, 3-hints)/3)^2 * 0.75^(misses*(misses+1)/2)`.
+
+Every board has a 1–5 difficulty rating and an estimated percentage of players who could solve it without hints or misses. These are explicitly labeled **design estimates, not player statistics**. The estimate uses the solver's hardest deduction, the number of advanced deductions, cat count, and region boundaries, rounded to 5% increments. It ranges from 10% to 90%. The base is `800 + 100*cats + 12*(100-estimated_percent)^1.35`, rounded to the nearest 50 points. There is no time penalty.
 
 ### Install on Android
 
@@ -58,6 +72,8 @@ godot --headless --path . --script res://tools/generate.gd -- super 12345 C:/pat
 
 Arguments are difficulty (`easy`, `hard`, `super`), numeric seed, output file, maximum candidate attempts, and optional `explain`. Put temporary output outside the project.
 
+`tools/render.gd` captures game, hint, scoring, completion, loss, guided-play, and regenerated-retry screens without changing the player's save. Pass a puzzle JSON, output PNG, view name, and optional one-based level number. The `guided` and `retry` views use the game's hint and retry actions; use level `17` to capture a one-heart retry.
+
 ## Assets and credits
 
 The visual reference was Meowdoku by Oakever Games: a warm cream canvas, colored rounded tiles, white X marks, cat faces, rule cards, and soft circular controls. This project uses its own name, code, mascot, and icons.
@@ -68,6 +84,8 @@ The visual reference was Meowdoku by Oakever Games: a warm cream canvas, colored
 - Godot Engine: MIT license, included in `assets/Godot-LICENSE.txt`.
 
 ## Verification
+
+Version 1.2.0: twelve generated boards (four per difficulty) passed the existing full hint walkthrough; standard/hard boards had eight cats and super-hard boards had nine. Game-driven renders exercised score banking on completion, miss penalties, three-hint zero scoring, and fresh-board retries for both three-heart and one-heart levels. Retries kept their level number, cleared penalties, restored the appropriate hearts/full potential points, and produced a different normalized layout. A separate save fixture reloaded a 3,600-point total and the current level's three-hint zero score. Gameplay, scoring help, victory, loss, and retry renders were inspected. Windows release startup and Android signature/version/permission checks passed. Native mouse/touch interaction and on-device Android checks remain outstanding.
 
 Version 1.1.0 imported and exported for Windows and Android without script errors. An isolated preview upgraded a version 1 save with 15 completed puzzles to level 16 with three hearts, then advanced to level 17 with one heart; the saved totals increased to 16 puzzles and remained at one completed round. The packaged Windows executable passed a headless startup check. Android signature verification passed, its version is 1.1.0 (code 2), no audio files are packaged, and vibration remains its only requested permission. No Android device was connected for on-device verification.
 

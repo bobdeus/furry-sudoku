@@ -256,7 +256,16 @@ func _search(puzzle: Dictionary, rows: Array, allowed: Array, columns: int, colo
 		if result.count >= limit or result.exhausted:
 			return
 
-func generate(difficulty: String, seed_value: int, size_hint: int = 7, max_attempts: int = 20000) -> Dictionary:
+func layout_key(puzzle: Dictionary) -> String:
+	var colors: Dictionary = {}
+	var shape: Array = []
+	for region in puzzle.regions:
+		if not colors.has(region):
+			colors[region] = colors.size()
+		shape.append(colors[region])
+	return JSON.stringify(shape)
+
+func generate(difficulty: String, seed_value: int, size_hint: int = 8, max_attempts: int = 20000, excluded_layout: String = "") -> Dictionary:
 	rng.seed = seed_value
 	var started := Time.get_ticks_msec()
 	var distribution := [0, 0, 0, 0, 0]
@@ -265,7 +274,7 @@ func generate(difficulty: String, seed_value: int, size_hint: int = 7, max_attem
 	for attempt in range(max_attempts):
 		if cancelled:
 			return {}
-		var n := size_hint
+		var n := maxi(8, size_hint)
 		if difficulty == "hard":
 			n = 8
 		elif difficulty == "super":
@@ -298,8 +307,10 @@ func generate(difficulty: String, seed_value: int, size_hint: int = 7, max_attem
 			distribution[rating.tier] += 1
 		else:
 			invalid_grades += 1
-		var matches: bool = (difficulty == "easy" and rating.tier <= 2 and rating.tier >= 1) or (difficulty == "hard" and rating.tier == 3) or (difficulty == "super" and rating.tier == 4)
+		var matches: bool = (difficulty == "easy" and rating.tier == 2) or (difficulty == "hard" and rating.tier == 3) or (difficulty == "super" and rating.tier == 4)
 		if matches:
+			if not excluded_layout.is_empty() and layout_key(puzzle) == excluded_layout:
+				continue
 			puzzle.rating = rating
 			puzzle.attempts = attempt + 1
 			puzzle.generation_ms = Time.get_ticks_msec() - started

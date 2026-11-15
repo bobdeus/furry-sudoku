@@ -1,6 +1,7 @@
 extends Control
 
 const Puzzle = preload("res://scripts/puzzle_engine.gd")
+const ScoreRules = preload("res://scripts/score_rules.gd")
 const CAT = preload("res://assets/cat.png")
 const FONT = preload("res://assets/Nunito.ttf")
 const SAVE := "user://progress.json"
@@ -22,8 +23,14 @@ var level := 0
 var round_number := 1
 var lives := 3
 var round_seed := 0
+var previous_layout := ""
 var cleared_rounds := 0
 var cleared_puzzles := 0
+var total_score := 0
+var level_scores: Dictionary = {}
+var level_misses := 0
+var revealed_hints: Array = []
+var challenge: Dictionary = {}
 var screen := "home"
 var modal := ""
 var loading := false
@@ -99,6 +106,7 @@ func _process(delta: float) -> void:
 			modal = "generation_error"
 		else:
 			puzzle = result
+			challenge = ScoreRules.profile(puzzle)
 			cats.clear()
 			marks.clear()
 			history.clear()
@@ -226,7 +234,8 @@ func _draw_home() -> void:
 	_text("A lot of cats.", Rect2(50, 660, 620, 66), 48)
 	_text("Find a cozy spot for every cat.", Rect2(50, 752, 620, 42), 26, MUTED)
 	_panel(Rect2(110, 847, 500, 85), Color("f0e9df"), 24, false)
-	_text("Endless puzzles   ·   Fresh hearts each time", Rect2(110, 871, 500, 40), 22)
+	_text("TOTAL SCORE   %s" % _number(total_score), Rect2(110, 868, 500, 46), 28, GREEN)
+	buttons.append({"id": "scoring", "rect": Rect2(110, 847, 500, 85)})
 	var continuing := not puzzle.is_empty() or round_seed != 0
 	_button("play", Rect2(110, 976, 500, 94), "Continue level %d" % (level + 1) if continuing else "Let's play", true, 29)
 	_button("how", Rect2(185, 1100, 350, 80), "How to play", false, 26)
@@ -240,6 +249,23 @@ func _difficulty(index: int = -1) -> String:
 func _starting_lives(index: int = -1) -> int:
 	var target := level if index == -1 else index
 	return 1 if target % 10 == 6 else 3
+
+func _number(value: int) -> String:
+	var digits := str(value)
+	var result := ""
+	for i in range(digits.length()):
+		if i > 0 and (digits.length() - i) % 3 == 0:
+			result += ","
+		result += digits[i]
+	return result
+
+func _level_score() -> int:
+	if level_won:
+		return int(level_scores.get(str(level + 1), 0))
+	return ScoreRules.points(int(challenge.get("base", 0)), revealed_hints.size(), level_misses, _starting_lives() == 1)
+
+func _estimate() -> String:
+	return "Estimate: ~%d%% solve with no hints or misses" % int(challenge.get("clean_percent", 0))
 
 func _draw_game() -> void:
 	_circle_button("home", Vector2(68, 90), "back")
@@ -263,11 +289,18 @@ func _draw_game() -> void:
 	_panel(Rect2(365, 218, 200, 64), Color.WHITE, 32, false)
 	for i in range(_starting_lives()):
 		_heart(Vector2(465 + (i - (_starting_lives() - 1) * 0.5) * 57, 249), 23, i < lives)
-	_panel(Rect2(30, 315, 660, 91), Color.WHITE, 23, false)
+	for i in range(2):
+		var x := 30 + i * 340
+		_panel(Rect2(x, 295, 320, 61), Color("edf4eb") if i == 0 else Color.WHITE, 19, false)
+		_text("LEVEL SCORE" if i == 0 else "TOTAL SCORE", Rect2(x + 12, 303, 124, 24), 15, MUTED)
+		var value := _number(_level_score() if i == 0 else total_score)
+		_text(value, Rect2(x + 137, 307, 170, 40), 26 if value.length() < 10 else 21, GREEN if i == 0 else INK, HORIZONTAL_ALIGNMENT_RIGHT)
+	buttons.append({"id": "scoring", "rect": Rect2(30, 295, 660, 61)})
+	_panel(Rect2(30, 367, 660, 61), Color.WHITE, 19, false)
 	var rules := ["1 cat per\ncolor", "1 cat per\nrow & column", "Cats cannot\ntouch"]
 	for i in range(3):
-		_panel(Rect2(40 + i * 217, 325, 207, 71), Color("f7f1e9"), 12, false)
-		_wrap(rules[i], Rect2(45 + i * 217, 332, 197, 66), 22)
+		_panel(Rect2(40 + i * 217, 373, 207, 49), Color("f7f1e9"), 12, false)
+		_wrap(rules[i], Rect2(45 + i * 217, 372, 197, 52), 19)
 	if loading:
 		_panel(BOARD, Color.WHITE, 25, false)
 		_cat(Rect2(276, 630 + sin(clock_time * 3) * 8, 168, 172))
@@ -275,18 +308,21 @@ func _draw_game() -> void:
 		_text("Checking every possibility", Rect2(70, 903, 580, 40), 22, MUTED)
 	elif not puzzle.is_empty():
 		_draw_board()
-	var difficulty := _difficulty()
+	var difficulty: String = puzzle.get("difficulty", _difficulty())
 	if hint.is_empty():
-		var label := "A little everyday logic"
+		var label := "STANDARD"
 		var color := MUTED
 		if difficulty == "hard":
-			label = "HARD  ·  Look for connected clues"
+			label = "HARD"
 			color = Color("b88e4d")
 		elif difficulty == "super":
-			label = "SUPER HARD  ·  Think a few moves ahead"
+			label = "SUPER HARD"
 			color = Color("9e78b0")
-		_text(label, Rect2(40, 1142, 640, 36), 22, color)
-		_text("Tap to mark ×  ·  Double-tap to place a cat", Rect2(40, 1190, 640, 38), 22, MUTED)
+		if not puzzle.is_empty():
+			_text("%s  ·  Difficulty %d/5" % [label, int(challenge.get("stars", 0))], Rect2(40, 1116, 640, 34), 22, color)
+			_text(_estimate(), Rect2(40, 1151, 640, 34), 21, INK)
+			_text("Design estimate, not player statistics", Rect2(40, 1185, 640, 28), 17, MUTED)
+		_text("Tap to mark ×  ·  Double-tap to place a cat", Rect2(40, 1220, 640, 30), 20, MUTED)
 	else:
 		_draw_hint()
 	for i in range(3):
@@ -298,7 +334,7 @@ func _draw_game() -> void:
 			_cat(Rect2(pos - Vector2(35, 35), Vector2(70, 72)))
 		else:
 			_icon("bulb", pos, 32, INK)
-		var labels := ["Undo", "Place cat" if cat_mode else "Mark ×", "Hint" if hint.is_empty() else ("Explain" if hint_stage == 0 else "Apply hint")]
+		var labels := ["Undo", "Place cat" if cat_mode else "Mark ×", "Hint · %d/3" % mini(3, revealed_hints.size()) if hint.is_empty() else ("Explain" if hint_stage == 0 else "Apply hint")]
 		_text(labels[i], Rect2(pos.x - 88, 1384, 176, 36), 22)
 		buttons.append({"id": ["undo", "mode", "hint"][i], "rect": Rect2(pos - Vector2(70, 58), Vector2(140, 155))})
 
@@ -370,25 +406,38 @@ func _draw_modal() -> void:
 			_text(str(i + 1), Rect2(100, 488 + i * 70, 38, 38), 25, Color.WHITE)
 			_text(instructions[i], Rect2(154, 487 + i * 70, 460, 40), 24, INK, HORIZONTAL_ALIGNMENT_LEFT)
 		_wrap("Tap or drag to mark empty squares. Double-tap to place a cat, or switch to Place cat mode. Right-click also places a cat on Windows.", Rect2(100, 716, 520, 112), 23)
-		_wrap("Three fresh hearts per puzzle. Levels 7, 17, 27… have just one! Retry without losing levels. Every ten puzzles completes a round. Hints are always free.", Rect2(100, 840, 520, 111), 23)
+		_wrap("At least eight cats per new puzzle. Fresh hearts each level; levels 7, 17, 27… have one. Hints reduce points; three hints means zero. Tap a score to learn more.", Rect2(100, 840, 520, 111), 23)
 		_button("close", Rect2(185, 978, 350, 76), "Got it", true)
-	elif modal == "won":
-		_cat(Rect2(270, 406, 180, 184))
-		_text("Everybody's cozy!", Rect2(90, 634, 540, 60), 40)
-		_text("Level %d complete" % (level + 1), Rect2(90, 710, 540, 44), 28, MUTED)
-		_text("%d puzzles solved in total" % cleared_puzzles, Rect2(90, 781, 540, 44), 27)
-		_button("next", Rect2(135, 914, 450, 88), "Next puzzle", true)
-	elif modal == "round_won":
-		_cat(Rect2(260, 398, 200, 204))
-		_text("Round %d complete!" % round_number, Rect2(80, 631, 560, 60), 37)
-		_text("%d rounds completed in total" % cleared_rounds, Rect2(90, 714, 540, 44), 27)
-		_wrap("Keep going! Your next puzzle has three fresh hearts, and your level keeps climbing.", Rect2(110, 795, 500, 94), 25, MUTED)
-		_button("next", Rect2(135, 931, 450, 88), "On to level %d" % (level + 2), true)
+	elif modal == "scoring":
+		_text("The Nine Lives score", Rect2(90, 395, 540, 52), 35)
+		_wrap("Rarer clean solves earn more. Hints keep 44%, then 11%, then 0% of your points. Each miss compounds the penalty.", Rect2(100, 471, 520, 101), 23)
+		_text("Puzzle value: %s" % _number(int(challenge.get("base", 0))), Rect2(90, 595, 540, 38), 25)
+		_text("One-heart bonus: %s" % ("+20%" if _starting_lives() == 1 else "not this level"), Rect2(90, 641, 540, 38), 23)
+		_text("%d hints revealed  ·  %d misses" % [revealed_hints.size(), level_misses], Rect2(90, 694, 540, 38), 24)
+		_text("LEVEL  %s" % _number(_level_score()), Rect2(90, 750, 540, 45), 32, GREEN)
+		_text("TOTAL  %s" % _number(total_score), Rect2(90, 806, 540, 40), 27)
+		_wrap("Points bank when you finish. Explain, Apply and reopening a clue cost no extra. A retry gives a new puzzle and full potential points. Hints stay available at zero.", Rect2(100, 864, 520, 96), 21, MUTED)
+		_button("close", Rect2(185, 986, 350, 76), "Got it", true)
+	elif modal in ["won", "round_won"]:
+		_cat(Rect2(278, 378, 164, 168))
+		_text("Round %d complete!" % round_number if modal == "round_won" else "Everybody's cozy!", Rect2(80, 558, 560, 52), 35)
+		_text("Level %d complete" % (level + 1), Rect2(90, 614, 540, 35), 24, MUTED)
+		_panel(Rect2(110, 666, 500, 112), Color("edf4eb"), 24, false)
+		_text("+%s points" % _number(_level_score()), Rect2(120, 678, 480, 50), 38, GREEN)
+		_text("TOTAL SCORE  %s" % _number(total_score), Rect2(120, 735, 480, 33), 23)
+		var result := "%d hints  ·  %d misses" % [revealed_hints.size(), level_misses]
+		if not level_scores.has(str(level + 1)):
+			result = "Completed before scoring was introduced"
+		elif revealed_hints.is_empty() and level_misses == 0:
+			result = "Perfect paws! No hints. No misses."
+		_text(result, Rect2(85, 797, 550, 36), 23)
+		_wrap(_estimate() + ".\nDesign estimate, not player statistics.", Rect2(95, 847, 530, 72), 20, MUTED)
+		_button("next", Rect2(135, 958, 450, 88), "On to level %d" % (level + 2), true)
 	elif modal == "lost":
 		_cat(Rect2(275, 415, 170, 174))
 		_text("Give it another try.", Rect2(90, 637, 540, 60), 40)
 		_text("That was your last heart.", Rect2(90, 723, 540, 44), 27)
-		_wrap("Your level and completed rounds are safe. Retry this puzzle with %s." % ("one fresh heart" if _starting_lives() == 1 else "three fresh hearts"), Rect2(110, 804, 500, 100), 25, MUTED)
+		_wrap("Your total score and level are safe. Retry with a brand-new puzzle, fresh hearts and full potential points.", Rect2(110, 804, 500, 100), 25, MUTED)
 		_button("retry_puzzle", Rect2(135, 945, 450, 88), "Retry level %d" % (level + 1), true)
 	elif modal == "generation_error":
 		_text("Let's find another puzzle", Rect2(90, 540, 540, 60), 34)
@@ -488,12 +537,22 @@ func _action(id: String) -> void:
 			modal = "settings"
 		"how":
 			modal = "how"
+		"scoring":
+			modal = "scoring"
 		"close":
 			modal = ""
+			if screen == "game":
+				if level_won:
+					modal = "round_won" if level % 10 == 9 else "won"
+				elif lives == 0:
+					modal = "lost"
 		"next":
 			if not level_won:
 				return
 			level += 1
+			previous_layout = ""
+			level_misses = 0
+			revealed_hints.clear()
 			round_number = level / 10 + 1
 			lives = _starting_lives()
 			round_seed = randi_range(1, 2000000000)
@@ -502,18 +561,13 @@ func _action(id: String) -> void:
 		"retry_puzzle":
 			if lives > 0 or level_won:
 				return
+			previous_layout = engine.layout_key(puzzle)
 			lives = _starting_lives()
-			cats.clear()
-			marks.clear()
-			history.clear()
-			hint.clear()
-			elapsed = 0.0
-			error_cell = -1
-			placed_cell = -1
-			last_cell = -1
-			toast = ""
+			level_misses = 0
+			revealed_hints.clear()
+			round_seed = (round_seed - 1 + randi_range(1, 1999999999)) % 2000000000 + 1
 			modal = ""
-			_save_progress()
+			_generate()
 		"retry":
 			modal = ""
 			round_seed = randi_range(1, 2000000000)
@@ -527,14 +581,14 @@ func _action(id: String) -> void:
 				hint.clear()
 				_save_progress()
 		"hint":
-			if not loading and not puzzle.is_empty() and not level_won:
+			if not loading and not puzzle.is_empty() and not level_won and lives > 0:
 				_show_hint()
 		"dismiss_hint":
 			hint.clear()
 
 func _back() -> void:
-	if not modal.is_empty() and modal in ["settings", "how"]:
-		modal = ""
+	if not modal.is_empty() and modal in ["settings", "how", "scoring"]:
+		_action("close")
 	elif screen == "game":
 		modal = ""
 		screen = "home"
@@ -543,6 +597,7 @@ func _back() -> void:
 func _generate() -> void:
 	_stop_worker()
 	puzzle.clear()
+	challenge.clear()
 	cats.clear()
 	marks.clear()
 	history.clear()
@@ -551,6 +606,8 @@ func _generate() -> void:
 	loading = true
 	cat_mode = false
 	last_cell = -1
+	dragging = false
+	drag_cells.clear()
 	error_cell = -1
 	placed_cell = -1
 	toast = ""
@@ -558,8 +615,7 @@ func _generate() -> void:
 	_save_progress()
 	worker_engine = Puzzle.new()
 	worker = Thread.new()
-	var n := 6 if level % 10 < 2 else 7
-	worker.start(worker_engine.generate.bind(_difficulty(), round_seed + level * 104729, n))
+	worker.start(worker_engine.generate.bind(_difficulty(), round_seed + level * 104729, 8, 20000, previous_layout))
 
 func _mark(cell: int, value: bool, remember: bool) -> void:
 	if cats.has(cell) or level_won or loading:
@@ -593,6 +649,7 @@ func _place(cell: int) -> void:
 		_check_win()
 	else:
 		lives -= 1
+		level_misses += 1
 		if not marks.has(cell):
 			marks.append(cell)
 		error_cell = cell
@@ -610,6 +667,11 @@ func _check_win() -> void:
 	if level_won or cats.size() != puzzle.n:
 		return
 	level_won = true
+	var score_key := str(level + 1)
+	if not level_scores.has(score_key):
+		var earned := ScoreRules.points(int(challenge.get("base", 0)), revealed_hints.size(), level_misses, _starting_lives() == 1)
+		level_scores[score_key] = earned
+		total_score += earned
 	cleared_puzzles += 1
 	for i in range(puzzle.n * puzzle.n):
 		if not cats.has(i) and not marks.has(i):
@@ -643,6 +705,7 @@ func _show_hint() -> void:
 		if marks.has(cell):
 			hint = engine.step(0, "Take another look", "This crossed-out square still belongs in the solution. Clear its mark so it can be considered again.", "unmark", [cell], [cell])
 			hint_stage = 0
+			_count_hint()
 			return
 	hint = engine.next_hint(puzzle, cats, marks)
 	if hint.has("contradiction") or hint.is_empty():
@@ -650,11 +713,23 @@ func _show_hint() -> void:
 		toast = "Clear a few notes and look again."
 		toast_until = clock_time + 2.5
 	hint_stage = 0
+	_count_hint()
+
+func _count_hint() -> void:
+	if hint.is_empty():
+		return
+	var cells: Array = hint.cells.duplicate()
+	cells.sort()
+	var key := JSON.stringify([hint.title, hint.action, cells])
+	if not revealed_hints.has(key):
+		revealed_hints.append(key)
+	_save_progress()
 
 func _save_progress() -> void:
 	if not is_node_ready() or not persistence_enabled:
 		return
-	var data := {"version": 2, "round": round_number, "level": level, "lives": lives, "seed": round_seed, "puzzle": puzzle, "cats": cats, "marks": marks, "level_won": level_won, "cleared_rounds": cleared_rounds, "cleared_puzzles": cleared_puzzles, "settings": settings, "elapsed": elapsed}
+	var data := {"version": 3, "round": round_number, "level": level, "lives": lives, "seed": round_seed, "puzzle": puzzle, "cats": cats, "marks": marks, "level_won": level_won, "cleared_rounds": cleared_rounds, "cleared_puzzles": cleared_puzzles, "settings": settings, "elapsed": elapsed, "level_scores": level_scores, "level_misses": level_misses, "revealed_hints": revealed_hints}
+	data.previous_layout = previous_layout
 	var file := FileAccess.open(SAVE + ".tmp", FileAccess.WRITE)
 	if file == null:
 		push_error("Could not save progress: %s" % FileAccess.get_open_error())
@@ -669,10 +744,11 @@ func _load_progress() -> void:
 	if not persistence_enabled or not FileAccess.file_exists(SAVE):
 		return
 	var data = JSON.parse_string(FileAccess.get_file_as_string(SAVE))
-	if not data is Dictionary or int(data.get("version", 0)) not in [1, 2]:
+	if not data is Dictionary or int(data.get("version", 0)) not in [1, 2, 3]:
 		return
 	level = maxi(0, int(data.get("level", 0)))
 	round_seed = int(data.get("seed", 0))
+	previous_layout = str(data.get("previous_layout", ""))
 	cleared_rounds = maxi(0, int(data.get("cleared_rounds", 0)))
 	cleared_puzzles = maxi(0, int(data.get("cleared_puzzles", 0)))
 	level_won = bool(data.get("level_won", false))
@@ -684,6 +760,13 @@ func _load_progress() -> void:
 	lives = clampi(int(data.get("lives", _starting_lives())), 0, _starting_lives())
 	if int(data.version) == 1 and lives > 0 and not level_won:
 		lives = _starting_lives()
+	level_scores = data.get("level_scores", {})
+	total_score = 0
+	for key in level_scores:
+		level_scores[key] = maxi(0, int(level_scores[key]))
+		total_score += level_scores[key]
+	level_misses = maxi(0, int(data.get("level_misses", _starting_lives() - lives)))
+	revealed_hints = data.get("revealed_hints", [])
 	elapsed = float(data.get("elapsed", 0))
 	for key in settings:
 		settings[key] = bool(data.get("settings", {}).get(key, settings[key]))
@@ -694,3 +777,13 @@ func _load_progress() -> void:
 		puzzle.solution = puzzle.solution.map(func(v): return int(v))
 		cats = data.get("cats", []).map(func(v): return int(v))
 		marks = data.get("marks", []).map(func(v): return int(v))
+		if puzzle.n < 8 and not level_won:
+			# Upgrade the small legacy board without moving the player's level backward.
+			puzzle.clear()
+			cats.clear()
+			marks.clear()
+			lives = _starting_lives()
+			level_misses = 0
+			revealed_hints.clear()
+			elapsed = 0.0
+		challenge = ScoreRules.profile(puzzle)
